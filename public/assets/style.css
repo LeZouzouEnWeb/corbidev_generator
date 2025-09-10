@@ -1,0 +1,22 @@
+/* Minimal, en plus de Bootstrap */
+.card .card-header .badge { border-radius: 999px; }
+.codebox {
+  position: relative;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: #0d1117;
+  color: #e6edf3;
+  border-radius: .75rem;
+  padding: .75rem 1rem;
+  min-height: 68px;
+}
+.item-actions {
+  display: flex;
+  gap: .5rem;
+}
+.item-actions .btn {
+  --bs-btn-padding-y: .25rem;
+  --bs-btn-padding-x: .5rem;
+  --bs-btn-font-size: .825rem;
+}
+.small-muted { font-size: .8rem; color: #6c757d; }
