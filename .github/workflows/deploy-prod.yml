@@ -1,0 +1,57 @@
+name: Deploy PHP Site to IONOS (develop)
+
+on:
+  push:
+    branches: [ main ]
+
+concurrency:
+  group: deploy-main
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare SSH
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          # Nettoie d'éventuels CRLF
+          tr -d '\r' < ~/.ssh/id_rsa > ~/.ssh/id_rsa.clean && mv ~/.ssh/id_rsa.clean ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H "${{ secrets.REMOTE_HOST }}" >> ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Sanity check SSH
+        run: ssh -i ~/.ssh/id_rsa ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }} "echo 'SSH OK, HOME=' \$HOME"
+
+      - name: Ensure destination exists
+        run: |
+          DEST="${{ secrets.REMOTE_CHEMIN }}/${{ vars.ADRESSE_GLOBAL }}/${{ vars.ADRESSE_PROD }}"
+          ssh -i ~/.ssh/id_rsa ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }} "mkdir -p \"$DEST\""
+
+      - name: Rsync to server
+        run: |
+          DEST="${{ secrets.REMOTE_CHEMIN }}/${{ vars.ADRESSE_GLOBAL }}/${{ vars.ADRESSE_PROD }}"
+          rsync -avz --delete \
+            --human-readable \
+            --exclude-from=".rsync-ignore" \
+            -e "ssh -i ~/.ssh/id_rsa" \
+            ./ ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }}:"$DEST"
+
+      # (Optionnel) Build/Composer côté serveur
+      # - name: Post-deploy tasks (remote)
+      #   run: |
+      #     DEST="${{ secrets.REMOTE_CHEMIN }}/${{ vars.ADRESSE_GLOBAL }}/${{ vars.ADRESSE_PROD }}"
+      #     ssh -i ~/.ssh/id_rsa ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }} << 'EOF'
+      #       set -e
+      #       cd "$DEST"
+      #       # composer install --no-dev --optimize-autoloader
+      #       # php bin/console cache:clear --env=prod
+      #       # php bin/console doctrine:migrations:migrate --no-interaction
+      #     EOF
