@@ -46,7 +46,7 @@ h1 { margin-bottom: 20px; }
     <div class="card section">
       <div class="card-header header-ca d-flex align-items-center justify-content-between">
         <div class="d-flex align-items-center gap-2">
-          <input class="form-check-input" type="checkbox" name="generate_option[]" value="ca" id="opt_ca" checked>
+          <input class="form-check-input" type="checkbox" name="generate_option[]" value="ca" id="opt_ca">
           <h2>📜 CA (Autorité de Certification)</h2>
         </div>
         <span class="small">Utilisée pour signer Serveur/Client</span>
@@ -210,7 +210,7 @@ h1 { margin-bottom: 20px; }
         </div>
         <div class="col-md-6">
           <div class="form-check mb-2">
-            <input class="form-check-input" type="checkbox" name="generate_option[]" value="token_uuid" id="opt_token" checked>
+            <input class="form-check-input" type="checkbox" name="generate_option[]" value="token_uuid" id="opt_token">
             <label class="form-check-label" for="opt_token">Jeton & UUID</label>
           </div>
           <div class="row g-2">
@@ -226,6 +226,31 @@ h1 { margin-bottom: 20px; }
               <div class="form-text">Autorisés: <code>!@#$%^&*()-_=+[]{};:,.?/</code></div>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SSH SECTION (checkbox, pas de bouton dédié) -->
+    <div class="card section">
+      <div class="card-header header-other d-flex align-items-center justify-content-between">
+        <h2>🧩 SSH (Ed25519)</h2>
+        <span class="small">Optionnelle, intégrée au processus</span>
+      </div>
+      <div class="card-body row g-3">
+        <div class="col-md-4">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="generate_option[]" value="ssh_ed25519" id="opt_ssh">
+            <label class="form-check-label" for="opt_ssh">Inclure une paire SSH (Ed25519)</label>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <label for="ssh_comment" class="form-label">Commentaire (ex: email)</label>
+          <input type="text" id="ssh_comment" name="ssh_comment" class="form-control" placeholder="ton.email@example.com" disabled>
+        </div>
+        <div class="col-md-4">
+          <label for="ssh_passphrase" class="form-label">Passphrase (optionnel)</label>
+          <input type="password" id="ssh_passphrase" name="ssh_passphrase" class="form-control" placeholder="••••••••" disabled>
+          <div class="form-text">Si renseignée: clé privée chiffrée via ssh-keygen.</div>
         </div>
       </div>
     </div>
@@ -307,6 +332,82 @@ function updateCnState() {
 });
 updateCnState();
 
+// SSH (Ed25519)
+async function downloadZipFromResponse(resp, fallbackName) {
+  if (!resp.ok) {
+    try {
+      const ct = resp.headers.get('Content-Type') || '';
+      const text = await resp.text();
+      let detail = '';
+      if (ct.includes('application/json')) {
+        try { const j = JSON.parse(text); detail = j?.error || j?.message || text; }
+        catch { detail = text; }
+      } else {
+        detail = text;
+      }
+      throw new Error('HTTP ' + resp.status + (detail ? ' — ' + detail : ''));
+    } catch (e) {
+      throw new Error('HTTP ' + resp.status);
+    }
+  }
+  const ct = resp.headers.get('Content-Type') || '';
+  const disp = resp.headers.get('Content-Disposition') || '';
+  let filename = fallbackName;
+  const m = /filename="?([^";]+)"?/i.exec(disp);
+  if (m && m[1]) filename = m[1];
+
+  if (ct.includes('application/zip') || ct.includes('application/octet-stream')) {
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; document.body.appendChild(a); a.click();
+    URL.revokeObjectURL(url); a.remove();
+    return;
+  }
+  // Fallback si ZipArchive indisponible (JSON renvoyé)
+  if (ct.includes('application/json') || ct.includes('text/json')) {
+    const data = await resp.json();
+    const text = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+    const blob = new Blob([text], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename.replace(/\.zip$/i, '') + '.json';
+    document.body.appendChild(a); a.click(); URL.revokeObjectURL(url); a.remove();
+    return;
+  }
+  // Défaut: tenter un téléchargement binaire
+  const blob = await resp.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; document.body.appendChild(a); a.click();
+  URL.revokeObjectURL(url); a.remove();
+}
+
+async function generateSSH() {
+  const comment = (document.getElementById('ssh_comment')?.value || '').trim();
+  const pass = (document.getElementById('ssh_passphrase')?.value || '');
+  const fd = new FormData();
+  if (comment) fd.append('comment', comment);
+  if (pass) fd.append('passphrase', pass);
+  const resp = await fetch('api/generate_ssh.php', { method: 'POST', body: fd });
+  const fallback = 'ssh_ed25519_' + new Date().toISOString().replace(/[-:T]/g,'').slice(0,15) + '.zip';
+  await downloadZipFromResponse(resp, fallback);
+}
+
+// Activer/désactiver les champs SSH selon la case
+const optSsh = document.getElementById('opt_ssh');
+function updateSshState() {
+  const enabled = !!(optSsh && optSsh.checked);
+  const c = document.getElementById('ssh_comment');
+  const p = document.getElementById('ssh_passphrase');
+  if (c) c.disabled = !enabled;
+  if (p) p.disabled = !enabled;
+}
+if (optSsh) {
+  optSsh.addEventListener('change', updateSshState);
+  updateSshState();
+}
+
 async function copyText(text) {
   try { await navigator.clipboard.writeText(text); showAlert('success', 'Copié'); }
   catch(e){ showAlert('warning', 'Impossible de copier automatiquement'); }
@@ -354,6 +455,17 @@ document.getElementById('result').addEventListener('click', (ev) => {
   }
   if (t.dataset.dl) {
     downloadRawFile(t.dataset.dl, t.dataset.name || 'download.txt');
+  }
+  if (t.dataset.dltext && t.dataset.src) {
+    const name = decodeURIComponent(t.dataset.dltext);
+    const ta = document.querySelector(t.dataset.src);
+    if (ta) {
+      const blob = new Blob([ta.value||''], {type:'text/plain;charset=utf-8'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = name; document.body.appendChild(a); a.click();
+      URL.revokeObjectURL(url); a.remove();
+    }
   }
 });
 
@@ -481,6 +593,51 @@ async function submitAndRender(formData, {zipOnly=false} = {}) {
       res.push(sectionCard('sec_utit', '🔑 UUID & Jeton', inner, (data.uuid ? 'UUID: '+data.uuid+'\n' : '') + (data.token ? 'Token: '+data.token : '')));
     }
 
+    // Si SSH coché: générer et afficher aussi la paire SSH
+    if (options.has('ssh_ed25519')) {
+      try {
+        const sshFd = new FormData();
+        const c = formData.get('ssh_comment');
+        const p = formData.get('ssh_passphrase');
+        if (c) sshFd.append('comment', c);
+        if (p) sshFd.append('passphrase', p);
+        const sshResp = await fetch('api/generate_ssh_json.php', { method: 'POST', body: sshFd });
+        if (!sshResp.ok) {
+          const msg = await sshResp.text();
+          throw new Error('SSH HTTP ' + sshResp.status + (msg? ' — ' + msg : ''));
+        }
+        const ssh = await sshResp.json();
+        const priv = ssh.id_ed25519 || '';
+        const pub  = ssh.id_ed25519_pub || '';
+        let inner = '';
+        const idPriv = 'ta_' + Math.random().toString(36).slice(2);
+        const idPub  = 'ta_' + Math.random().toString(36).slice(2);
+        inner += `<div class="mb-3">
+          <div class="row-title">
+            <label class="form-label me-2">id_ed25519</label>
+            <div class="actions">
+              <button class="btn btn-outline-secondary btn-sm" data-copy="#${idPriv}">📋 Copier</button>
+              <button class="btn btn-outline-success btn-sm" data-dltext="${encodeURIComponent('id_ed25519')}" data-src="#${idPriv}">⬇️ Télécharger</button>
+            </div>
+          </div>
+          <textarea id="${idPriv}" readonly class="form-control">${priv}</textarea>
+        </div>`;
+        inner += `<div class="mb-3">
+          <div class="row-title">
+            <label class="form-label me-2">id_ed25519.pub</label>
+            <div class="actions">
+              <button class="btn btn-outline-secondary btn-sm" data-copy="#${idPub}">📋 Copier</button>
+              <button class="btn btn-outline-success btn-sm" data-dltext="${encodeURIComponent('id_ed25519.pub')}" data-src="#${idPub}">⬇️ Télécharger</button>
+            </div>
+          </div>
+          <textarea id="${idPub}" readonly class="form-control">${pub}</textarea>
+        </div>`;
+        res.push(sectionCard('sec_ssh', '🧩 SSH (Ed25519)', inner, priv + '\n' + pub));
+      } catch (e) {
+        showAlert('warning', 'SSH: ' + (e?.message || e));
+      }
+    }
+
     resultNode.innerHTML = res.join('');
 
   } catch (err) {
@@ -527,6 +684,22 @@ zipOnlyBtn.addEventListener('click', async () => {
   const formData = new FormData(form);
   buildSummary(formData);
   await submitAndRender(formData, {zipOnly:true});
+  // Si SSH est coché, déclencher un téléchargement ZIP séparé
+  const optS = document.getElementById('opt_ssh');
+  if (optS && optS.checked) {
+    try {
+      const comment = (document.getElementById('ssh_comment')?.value || '').trim();
+      const pass = (document.getElementById('ssh_passphrase')?.value || '');
+      const fd = new FormData();
+      if (comment) fd.append('comment', comment);
+      if (pass) fd.append('passphrase', pass);
+      const resp = await fetch('api/generate_ssh.php', { method: 'POST', body: fd });
+      const fallback = 'ssh_ed25519_' + new Date().toISOString().replace(/[-:T]/g,'').slice(0,15) + '.zip';
+      await downloadZipFromResponse(resp, fallback);
+    } catch (err) {
+      showAlert('warning', 'SSH ZIP: ' + (err?.message || err));
+    }
+  }
 });
 </script>
 </body>
