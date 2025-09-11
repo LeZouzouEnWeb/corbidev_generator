@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 /**
  * cert_generator.php - pro-plus5
  * - Algorithmes indépendants par type (CA/Serveur/Client)
