@@ -1,0 +1,60 @@
+<?php
+/**
+ * cert_generator.php - pro-plus5
+ * - Algorithmes indépendants par type (CA/Serveur/Client)
+ * - Validités spécifiques par type
+ * - SAN serveur
+ * - PKCS#12 binaire + Base64
+ * - Empreintes / validités / Apache & Nginx
+ * - Jeton configurable: longueur + caractères spéciaux
+ * - Fichiers temporaires par élément + ZIP global
+ */
+if (!defined('API_GATEWAY')) { define('API_GATEWAY', true); }
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    http_response_code(405);
+    header('Content-Type: text/plain; charset=utf-8');
+    exit('Méthode non autorisée');
+}
+
+// Robust JSON-only output: capture any warnings/notices and convert to exceptions
+// Prevent HTML error output from corrupting JSON
+@ini_set('display_errors', '0');
+@ini_set('html_errors', '0');
+if (!headers_sent()) { header_remove('X-Powered-By'); }
+ob_start();
+set_error_handler(function($severity, $message, $file = null, $line = null) {
+    // Respect error_reporting; convert any reported error to exception
+    if (!(error_reporting() & $severity)) { return false; }
+    throw new ErrorException($message, 0, $severity, (string)$file, (int)$line);
+});
+
+function generateKey(string $alg, int $rsaBits = 2048, string $ecCurve = 'prime256v1'): OpenSSLAsymmetricKey {
+    if ($alg === 'EC') {
+        $key = openssl_pkey_new(['private_key_type' => OPENSSL_KEYTYPE_EC, 'curve_name' => $ecCurve]);
+        if ($key === false) { throw new RuntimeException('Échec génération clé EC'); }
+        return $key;
+    }
+    $key = openssl_pkey_new(['private_key_bits' => $rsaBits, 'private_key_type' => OPENSSL_KEYTYPE_RSA]);
+    if ($key === false) { throw new RuntimeException('Échec génération clé RSA'); }
+    return $key;
+}
+function exportPrivateKey(OpenSSLAsymmetricKey $key): string {
+    if (!openssl_pkey_export($key, $out)) { throw new RuntimeException('Échec export clé privée'); }
+    return $out;
+}
+function exportPublicKey(OpenSSLAsymmetricKey $privateKey): string {
+    $details = openssl_pkey_get_details($privateKey);
+    if ($details === false || empty($details['key'])) { throw new RuntimeException('Échec export clé publique'); }
+    return $details['key'];
+}
+function createOpenSslConfigWithSAN(array $sans): string {
+    $sanLine = 'subjectAltName=' . implode(',', $sans);
+    $content = "[ req ]
+distinguished_name = req_distinguished_name
+prompt = no
+[ req_distinguished_name ]
+CN = temp
+[ v3_req ]
+{$sanLine}
+";
+    $path = tempnam(sys_get_temp_dir(), 'ossl_');

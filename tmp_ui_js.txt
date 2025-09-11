@@ -1,0 +1,57 @@
+﻿(function(){
+  const $  = (s, c=document) => c.querySelector(s);
+  const $$ = (s, c=document) => Array.from(c.querySelectorAll(s));
+
+  // Theme toggle persist
+  (function(){
+    const KEY='certkit_theme'; const html=document.documentElement;
+    function apply(t){ html.setAttribute('data-bs-theme', t); try{ localStorage.setItem(KEY,t);}catch(e){} }
+    document.addEventListener('DOMContentLoaded', () => {
+      const saved = localStorage.getItem(KEY); if (saved==='light'||saved==='dark') apply(saved);
+      const btn = $('#themeBtn'); if (btn) btn.addEventListener('click', () => {
+        const cur = html.getAttribute('data-bs-theme') || 'dark';
+        apply(cur === 'dark' ? 'light' : 'dark');
+      });
+    });
+  })();
+
+  document.addEventListener('DOMContentLoaded', () => {
+    const form = $('#certForm');
+    const backBtn = $('#backToTiles');
+    const zipBtn = $('#zipOnlyBtn'), zipOnly = $('#zip_only');
+
+    // 1) Ã‰tat initial : aucune option cochÃ©e
+    $$('input[name="generate_option[]"]').forEach(i => i.checked = false);
+
+    // 2) Tiles â†’ ouvrir modals + cocher l'option liÃ©e
+    const map = new Map([ ['#modalCA','#opt_ca'], ['#modalServer','#opt_server'], ['#modalClient','#opt_client'], ['#modalSSH','#opt_ssh'], ['#modalOther','#opt_token'] ]);
+    $$('.tile[data-bs-target]').forEach(tile => {
+      tile.addEventListener('click', ev => {
+        ev.preventDefault();
+        const sel = tile.getAttribute('data-bs-target');
+        const modal = $(sel);
+        if (modal && window.bootstrap && bootstrap.Modal) bootstrap.Modal.getOrCreateInstance(modal).show();
+        const chk = $(map.get(sel)); if (chk) chk.checked = true;
+      });
+    });
+
+    // 3) Validation : au moins une option cochÃ©e (document-wide)
+    if (form) form.addEventListener('submit', (e)=>{
+      const any = document.querySelectorAll('input[name="generate_option[]"]:checked').length > 0;
+      if (!any) { e.preventDefault(); alert('SÃ©lectionne au moins un module avant de gÃ©nÃ©rer.'); }
+    });
+
+    // 4) ZIP-only
+    if (zipBtn && zipOnly && form) zipBtn.addEventListener('click', ()=>{ zipOnly.value='1'; form.submit(); });
+
+    // 5) Reset (tout dÃ©cocher + vider les champs)
+    const resetBtn = $('#resetBtn');
+    if (resetBtn) resetBtn.addEventListener('click', ()=>{
+      form.reset();
+      $$('input[name="generate_option[]"]').forEach(i => i.checked = false);
+    });
+
+    // 6) Retour â†’ GET (affiche widgets)
+    if (backBtn) backBtn.addEventListener('click', ()=> location.assign(location.origin + location.pathname));
+  });
+})();

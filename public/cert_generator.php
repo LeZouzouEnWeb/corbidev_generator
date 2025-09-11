@@ -1,6 +1,6 @@
-<?php
+﻿<?php
 /**
- * cert_generator.php — pro-plus5
+ * cert_generator.php - pro-plus5
  * - Algorithmes indépendants par type (CA/Serveur/Client)
  * - Validités spécifiques par type
  * - SAN serveur
@@ -14,6 +14,27 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
     header('Content-Type: text/plain; charset=utf-8');
     exit('Méthode non autorisée');
+}
+
+// Robust JSON-only output: capture any warnings/notices and convert to exceptions
+// Prevent HTML error output from corrupting JSON
+@ini_set('display_errors', '0');
+@ini_set('html_errors', '0');
+if (!headers_sent()) { header_remove('X-Powered-By'); }
+ob_start();
+set_error_handler(function($severity, $message, $file = null, $line = null) {
+    // Respect error_reporting; convert any reported error to exception
+    if (!(error_reporting() & $severity)) { return false; }
+    throw new ErrorException($message, 0, $severity, (string)$file, (int)$line);
+});
+
+// Utilitaires: vérifier la disponibilité d'OpenSSL avant d'opérer
+if (!function_exists('ensureOpenSsl')) {
+    function ensureOpenSsl(): void {
+        if (!extension_loaded('openssl')) {
+            throw new RuntimeException("OpenSSL non disponible (activez l'extension openssl dans php.ini).");
+        }
+    }
 }
 
 function generateKey(string $alg, int $rsaBits = 2048, string $ecCurve = 'prime256v1'): OpenSSLAsymmetricKey {
@@ -127,6 +148,7 @@ $wantServer = in_array('server', $options, true);
 $wantClient = in_array('client', $options, true);
 $wantToken  = in_array('token_uuid', $options, true);
 $wantKey    = in_array('keypair', $options, true);
+$wantSSH    = in_array('ssh_ed25519', $options, true);
 
 // Per-type algos + sizes/curves
 $caAlg  = $_POST['ca_key_alg'] ?? 'RSA';
@@ -168,14 +190,24 @@ $includeP12Cli = isset($_POST['include_p12_client']) && $_POST['include_p12_clie
 $p12PassSrv = (string)($_POST['p12_password_server'] ?? '');
 $p12PassCli = (string)($_POST['p12_password_client'] ?? '');
 
-// Token options
+// Token options (support both legacy and current field names)
 $tokenLength = isset($_POST['token_length']) ? (int)$_POST['token_length'] : 32;
 $tokenWithSpecial = isset($_POST['token_include_special']) && $_POST['token_include_special'] === '1';
+$tokenBytes = isset($_POST['token_bytes']) ? (int)$_POST['token_bytes'] : null; // Base64 mode if provided
+$tokenUrlSafe = isset($_POST['token_urlsafe']) && $_POST['token_urlsafe'] === '1';
+$uuidCount = isset($_POST['uuid_count']) ? (int)$_POST['uuid_count'] : 1;
+if ($uuidCount < 1) $uuidCount = 1; if ($uuidCount > 50) $uuidCount = 50;
+
+// SSH inputs
+$sshComment = isset($_POST['ssh_comment']) ? trim((string)$_POST['ssh_comment']) : '';
+$sshPass    = isset($_POST['ssh_passphrase']) ? (string)$_POST['ssh_passphrase'] : '';
 
 $result = ['files' => []];
 $filesForZip = [];
 
 try {
+    // Vérifier OpenSSL si un élément X.509/RSA/EC est demandé
+    if ($wantCA || $wantServer || $wantClient || $wantKey) { ensureOpenSsl(); }
     // CA if needed
     $caKey = null;
     $caCert = null;
@@ -284,31 +316,55 @@ ssl_verify_client optional;";
     }
 
     if ($wantToken) {
-        $uuid = (function(){
-            if (function_exists('uuid_create')) { return uuid_create(UUID_TYPE_RANDOM); }
-            $data = random_bytes(16);
-            $data[6] = chr((ord($data[6]) & 0x0f) | 0x40);
-            $data[8] = chr((ord($data[8]) & 0x3f) | 0x80);
-            return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
-        })();
-        $token = generateToken((int)$GLOBALS['_POST']['token_length'] ?? 32, isset($_POST['token_include_special']) && $_POST['token_include_special'] === '1');
-        $result['uuid']  = $uuid;
+        // UUID(s)
+        $uuids = [];
+        for ($i=0; $i<$uuidCount; $i++) {
+            $one = (function(){
+                if (function_exists('uuid_create')) { return uuid_create(UUID_TYPE_RANDOM); }
+                $data = random_bytes(16);
+                $data[6] = chr((ord($data[6]) & 0x0f) | 0x40);
+                $data[8] = chr((ord($data[8]) & 0x3f) | 0x80);
+                return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
+            })();
+            $uuids[] = $one;
+        }
+        $uuidOut = implode("\n", $uuids);
+
+        // Token: either Base64(url-safe) from bytes, or legacy charset token
+        if ($tokenBytes !== null && $tokenBytes > 0) {
+            $bytes = max(4, min(512, $tokenBytes));
+            $raw = random_bytes($bytes);
+            $b64 = base64_encode($raw);
+            if ($tokenUrlSafe) { $b64 = rtrim(strtr($b64, '+/', '-_'), '='); }
+            $token = $b64;
+        } else {
+            $token = generateToken($tokenLength, $tokenWithSpecial);
+        }
+
+        $result['uuid']  = $uuidOut;
         $result['token'] = $token;
-        $filesForZip['uuid.txt']  = $uuid;
+        $filesForZip['uuid.txt']  = $uuidOut;
         $filesForZip['token.txt'] = $token;
-        $result['files']['uuid.txt']  = writeTempFile('uuid.txt', $uuid);
+        $result['files']['uuid.txt']  = writeTempFile('uuid.txt', $uuidOut);
         $result['files']['token.txt'] = writeTempFile('token.txt', $token);
     }
 
     $zipPath = createZip($filesForZip);
     if ($zipPath !== null) { $result['zip_path'] = $zipPath; }
 
+    // Discard any buffered warnings/notices to keep response clean JSON
+    if (ob_get_length() !== false) { ob_end_clean(); }
     header('Content-Type: application/json; charset=utf-8');
     echo json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
     exit;
 } catch (Throwable $e) {
+    $noise = '';
+    try { $noise = (string)ob_get_contents(); } catch (Throwable $_) { $noise = ''; }
+    if (ob_get_length() !== false) { ob_end_clean(); }
     http_response_code(500);
     header('Content-Type: application/json; charset=utf-8');
-    echo json_encode(['error' => $e->getMessage()], JSON_PRETTY_PRINT);
+    $payload = ['error' => $e->getMessage()];
+    if ($noise !== '') { $payload['debug'] = mb_substr($noise, 0, 400); }
+    echo json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     exit;
 }
