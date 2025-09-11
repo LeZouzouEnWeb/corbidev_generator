@@ -161,10 +161,24 @@
       // Client
       const cliName = $('input[name="client_name"]'); if (cliName) fd.append('client_cn', cliName.value.trim());
       const cliDays = $('input[name="client_days"]'); if (cliDays) fd.append('days_client', cliDays.value);
+      // Token/UUID
+      if (selected.includes('token_uuid')){
+        const tBytes = $('input[name="token_bytes"]'); if (tBytes) fd.append('token_bytes', tBytes.value);
+        const tUrl = $('#token_urlsafe'); if (tUrl && tUrl.checked) fd.append('token_urlsafe','1');
+        const uCount = $('input[name="uuid_count"]'); if (uCount) fd.append('uuid_count', uCount.value);
+      }
 
       try {
         const res = await fetch('cert_generator.php', { method:'POST', body: fd });
-        if (!res.ok) throw new Error('Erreur serveur ('+res.status+')');
+        const ctype = res.headers.get('content-type') || '';
+        if (!res.ok) {
+          const text = await res.text().catch(()=> '');
+          throw new Error('HTTP '+res.status+' '+res.statusText+(text?': '+text.substring(0,300):''));
+        }
+        if (!ctype.includes('application/json')) {
+          const text = await res.text().catch(()=> '');
+          throw new Error('Réponse non-JSON reçue: '+text.substring(0,300));
+        }
         const json = await res.json();
         renderResult(json);
         showResults();
@@ -178,13 +192,9 @@
       }
     }
 
-    if (form) form.addEventListener('submit', (e)=>{
-      e.preventDefault();
-      // Ne lancer que si l’expéditeur est le bouton Générer
-      const s = e.submitter;
-      if (!s || s.id !== 'generateBtn') return;
-      submitGenerate(false);
-    });
+    // Ne plus dépendre de l'événement submit du formulaire
+    const genBtn = $('#generateBtn');
+    if (genBtn) genBtn.addEventListener('click', (e)=>{ e.preventDefault(); submitGenerate(false); });
     if (zipBtn) zipBtn.addEventListener('click', ()=> submitGenerate(true));
 
     // Reset manuel
