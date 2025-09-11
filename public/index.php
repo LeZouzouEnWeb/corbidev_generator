@@ -60,7 +60,7 @@ $isResults = ($_SERVER['REQUEST_METHOD'] === 'POST');
       </section>
 
       <!-- Le formulaire englobe tous les modals pour garantir l'envoi POST de tous les champs -->
-      <form id="certForm" method="POST">
+      <form id="certForm" method="POST" autocomplete="off">
         <input type="hidden" name="zip_only" id="zip_only" value="">
         <!-- Modals -->
         <div class="modal fade" id="modalCA" tabindex="-1" aria-hidden="true">
@@ -79,7 +79,7 @@ $isResults = ($_SERVER['REQUEST_METHOD'] === 'POST');
                 <div class="col-md-6"><label class="form-label">Pays (C)</label><input type="text" class="form-control" name="ca_c" placeholder="FR"></div>
               </div>
             </div>
-            <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button><button class="btn btn-primary" data-bs-dismiss="modal">Valider</button></div>
+            <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button><button type="button" class="btn btn-primary" data-bs-dismiss="modal">Valider</button></div>
           </div></div>
         </div>
 
@@ -99,7 +99,7 @@ $isResults = ($_SERVER['REQUEST_METHOD'] === 'POST');
                 <div class="col-md-6"><label class="form-label">Organisation (O)</label><input type="text" class="form-control" name="server_org" placeholder="Ex. ACME Corp."></div>
               </div>
             </div>
-            <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button><button class="btn btn-primary" data-bs-dismiss="modal">Valider</button></div>
+            <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button><button type="button" class="btn btn-primary" data-bs-dismiss="modal">Valider</button></div>
           </div></div>
         </div>
 
@@ -118,7 +118,7 @@ $isResults = ($_SERVER['REQUEST_METHOD'] === 'POST');
                 <div class="col-md-3"><label class="form-label">Taille clé</label><select class="form-select" name="client_key_bits"><option value="2048" selected>RSA 2048</option><option value="3072">RSA 3072</option><option value="4096">RSA 4096</option></select></div>
               </div>
             </div>
-            <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button><button class="btn btn-primary" data-bs-dismiss="modal">Valider</button></div>
+            <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button><button type="button" class="btn btn-primary" data-bs-dismiss="modal">Valider</button></div>
           </div></div>
         </div>
 
@@ -135,7 +135,7 @@ $isResults = ($_SERVER['REQUEST_METHOD'] === 'POST');
                 <div class="col-md-4"><label class="form-label">Passphrase (optionnel)</label><input type="password" class="form-control" name="ssh_passphrase" autocomplete="new-password"></div>
               </div>
             </div>
-            <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button><button class="btn btn-primary" data-bs-dismiss="modal">Valider</button></div>
+            <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button><button type="button" class="btn btn-primary" data-bs-dismiss="modal">Valider</button></div>
           </div></div>
         </div>
 
@@ -153,7 +153,7 @@ $isResults = ($_SERVER['REQUEST_METHOD'] === 'POST');
                 <div class="col-md-12"><div class="form-check"><input class="form-check-input" type="checkbox" name="token_urlsafe" id="token_urlsafe" value="1" checked><label class="form-check-label" for="token_urlsafe">Utiliser Base64 URL-safe</label></div></div>
               </div>
             </div>
-            <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button><button class="btn btn-primary" data-bs-dismiss="modal">Valider</button></div>
+            <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button><button type="button" class="btn btn-primary" data-bs-dismiss="modal">Valider</button></div>
           </div></div>
         </div>
       </form>
@@ -162,6 +162,6 @@ $isResults = ($_SERVER['REQUEST_METHOD'] === 'POST');
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="assets/app.js?v=4.1"></script>
-    <script src="assets/ui.js?v=4.1"></script>
+    <script src="assets/ui.js?v=4.2"></script>
   </body>
 </html>
