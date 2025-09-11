@@ -1,22 +1,18 @@
-/* Minimal, en plus de Bootstrap */
-.card .card-header .badge { border-radius: 999px; }
-.codebox {
-  position: relative;
-  white-space: pre-wrap;
-  word-break: break-word;
-  background: #0d1117;
-  color: #e6edf3;
-  border-radius: .75rem;
-  padding: .75rem 1rem;
-  min-height: 68px;
-}
-.item-actions {
-  display: flex;
-  gap: .5rem;
-}
-.item-actions .btn {
-  --bs-btn-padding-y: .25rem;
-  --bs-btn-padding-x: .5rem;
-  --bs-btn-font-size: .825rem;
-}
-.small-muted { font-size: .8rem; color: #6c757d; }
+
+.badge-ui { background:transparent; border:1px solid rgba(128,128,128,.45); color:inherit; padding:.25rem .5rem; border-radius:.5rem; font-weight:600; }
+[data-bs-theme="dark"] .badge-ui { border-color:rgba(230,230,230,.55); color:#e9ecef; }
+
+.tile-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(220px,1fr)); gap:16px; }
+.tile { border:1px solid var(--bs-border-color-translucent); border-radius:16px; padding:18px 16px; background:var(--bs-tertiary-bg); min-height:140px;
+        display:flex; flex-direction:column; justify-content:center; align-items:flex-start; box-shadow:0 2px 8px rgba(0,0,0,.08);
+        transition:transform .12s ease, box-shadow .12s ease, border-color .12s ease; cursor:pointer; }
+.tile:hover, .tile:focus { transform:translateY(-2px); box-shadow:0 6px 22px rgba(0,0,0,.18); }
+.tile-emoji{ font-size:30px; } .tile-title{ font-weight:700; margin-top:6px; margin-bottom:2px; } .tile-desc{ opacity:.85; }
+:root{ --tile-ca:#e8f0ff; --tile-server:#e8fff6; --tile-client:#fff7e6; --tile-ssh:#f5e8ff; --tile-other:#ffe8ec; }
+[data-bs-theme="dark"]{ --tile-ca:#0d2244; --tile-server:#0d3326; --tile-client:#3a2a08; --tile-ssh:#2a0d44; --tile-other:#3a0d1a; }
+.tile[data-bs-target="#modalCA"]{ background:var(--tile-ca); }
+.tile[data-bs-target="#modalServer"]{ background:var(--tile-server); }
+.tile[data-bs-target="#modalClient"]{ background:var(--tile-client); }
+.tile[data-bs-target="#modalSSH"]{ background:var(--tile-ssh); }
+.tile[data-bs-target="#modalOther"]{ background:var(--tile-other); }
+#actionBar{ position:sticky; top:0; z-index:10; padding:.5rem 0; backdrop-filter:blur(3px); }
