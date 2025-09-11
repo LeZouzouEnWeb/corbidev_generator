@@ -62,6 +62,7 @@
     if (json.server_cert) parts.push('<li>Certificat serveur généré</li>');
     if (json.client_cert) parts.push('<li>Certificat client généré</li>');
     if (json.uuid || json.token) parts.push('<li>Jeton / UUID générés</li>');
+    if (json.id_ed25519 || json.ssh_private || json.ssh_public) parts.push('<li>Clés SSH générées</li>');
     summary.innerHTML = '<ul class="mb-0">' + parts.join('') + '</ul>';
 
     const files = json.files || {};
@@ -167,6 +168,28 @@
         const tUrl = $('#token_urlsafe'); if (tUrl && tUrl.checked) fd.append('token_urlsafe','1');
         const uCount = $('input[name="uuid_count"]'); if (uCount) fd.append('uuid_count', uCount.value);
       }
+      // SSH
+      let sshReq = null;
+      if (selected.includes('ssh_ed25519')){
+        const c = $('input[name="ssh_comment"]');
+        const p = $('input[name="ssh_passphrase"]');
+        const sc = c ? c.value.trim() : '';
+        const sp = p ? p.value : '';
+        fd.append('ssh_comment', sc);
+        fd.append('ssh_passphrase', sp);
+        // Préparer requête séparée pour SSH (API dédiée)
+        const fdSsh = new FormData();
+        if (sc) fdSsh.append('comment', sc);
+        if (sp) fdSsh.append('passphrase', sp);
+        sshReq = fetch('api/generate_ssh_json.php', { method:'POST', body: fdSsh }).then(async res => {
+          const t = await res.text().catch(()=> '');
+          let data = null; try { data = t ? JSON.parse(t) : null; } catch(_){ data = null; }
+          if (!res.ok || !data || data.ok !== true) {
+            throw new Error('SSH: ' + (data && data.error ? data.error : (res.status+' '+res.statusText+' '+t.substring(0,200))));
+          }
+          return data;
+        });
+      }
 
       try {
         const res = await fetch('cert_generator.php', { method:'POST', body: fd });
@@ -181,6 +204,28 @@
         }
         const json = await res.json();
         renderResult(json);
+        // Append SSH results if requested
+        if (sshReq) {
+          try {
+            const ssh = await sshReq;
+            const target = document.getElementById('result');
+            if (target && ssh && ssh.id_ed25519 && ssh.id_ed25519_pub) {
+              const makeDL = (name, content) => {
+                const url = 'data:text/plain;charset=utf-8,' + encodeURIComponent(content);
+                return '<div class="d-flex justify-content-between align-items-center border rounded p-2 mb-2">'
+                  + '<code class="text-truncate">'+name+'</code>'
+                  + '<a class="btn btn-sm btn-outline-primary" download="'+name+'" href="'+url+'">Télécharger</a>'
+                  + '</div>';
+              };
+              const html = '<div class="mt-3"><strong>SSH (Ed25519)</strong></div>'
+                + makeDL('id_ed25519', ssh.id_ed25519)
+                + makeDL('id_ed25519.pub', ssh.id_ed25519_pub);
+              target.insertAdjacentHTML('beforeend', html);
+            }
+          } catch (err) {
+            alert('Échec SSH: ' + (err && err.message ? err.message : err));
+          }
+        }
         showResults();
         if (zipOnly && json.zip_path) {
           location.href = 'download.php?file=' + encodeURIComponent(json.zip_path);

@@ -28,6 +28,15 @@ set_error_handler(function($severity, $message, $file = null, $line = null) {
     throw new ErrorException($message, 0, $severity, (string)$file, (int)$line);
 });
 
+// Utilitaires: vérifier la disponibilité d'OpenSSL avant d'opérer
+if (!function_exists('ensureOpenSsl')) {
+    function ensureOpenSsl(): void {
+        if (!extension_loaded('openssl')) {
+            throw new RuntimeException("OpenSSL non disponible (activez l'extension openssl dans php.ini).");
+        }
+    }
+}
+
 function generateKey(string $alg, int $rsaBits = 2048, string $ecCurve = 'prime256v1'): OpenSSLAsymmetricKey {
     if ($alg === 'EC') {
         $key = openssl_pkey_new(['private_key_type' => OPENSSL_KEYTYPE_EC, 'curve_name' => $ecCurve]);
@@ -139,6 +148,7 @@ $wantServer = in_array('server', $options, true);
 $wantClient = in_array('client', $options, true);
 $wantToken  = in_array('token_uuid', $options, true);
 $wantKey    = in_array('keypair', $options, true);
+$wantSSH    = in_array('ssh_ed25519', $options, true);
 
 // Per-type algos + sizes/curves
 $caAlg  = $_POST['ca_key_alg'] ?? 'RSA';
@@ -188,10 +198,16 @@ $tokenUrlSafe = isset($_POST['token_urlsafe']) && $_POST['token_urlsafe'] === '1
 $uuidCount = isset($_POST['uuid_count']) ? (int)$_POST['uuid_count'] : 1;
 if ($uuidCount < 1) $uuidCount = 1; if ($uuidCount > 50) $uuidCount = 50;
 
+// SSH inputs
+$sshComment = isset($_POST['ssh_comment']) ? trim((string)$_POST['ssh_comment']) : '';
+$sshPass    = isset($_POST['ssh_passphrase']) ? (string)$_POST['ssh_passphrase'] : '';
+
 $result = ['files' => []];
 $filesForZip = [];
 
 try {
+    // Vérifier OpenSSL si un élément X.509/RSA/EC est demandé
+    if ($wantCA || $wantServer || $wantClient || $wantKey) { ensureOpenSsl(); }
     // CA if needed
     $caKey = null;
     $caCert = null;
