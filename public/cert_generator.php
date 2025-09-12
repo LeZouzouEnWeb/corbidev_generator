@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 /**
  * cert_generator.php - pro-plus5
  * - Algorithmes indépendants par type (CA/Serveur/Client)
@@ -59,10 +59,14 @@ function exportPublicKey(OpenSSLAsymmetricKey $privateKey): string {
 function createOpenSslConfigWithSAN(array $sans): string {
     $sanLine = 'subjectAltName=' . implode(',', $sans);
     $content = "[ req ]
+default_bits = 2048
+default_md = sha256
 distinguished_name = req_distinguished_name
 prompt = no
+
 [ req_distinguished_name ]
 CN = temp
+
 [ v3_req ]
 {$sanLine}
 ";
@@ -70,6 +74,7 @@ CN = temp
     file_put_contents($path, $content);
     return $path;
 }
+
 function generateCertificate(array $dn, OpenSSLAsymmetricKey $privateKey, $caCert = null, ?OpenSSLAsymmetricKey $caKey = null, int $days = 365, array $sans = []): string {
     $args = ['digest_alg' => 'sha256'];
     $temp = null;
@@ -177,12 +182,22 @@ $daysClient = max(1, (int)($_POST['days_client'] ?? 825));
 
 $serverCN = trim((string)($_POST['server_cn'] ?? ''));
 $clientCN = trim((string)($_POST['client_cn'] ?? ''));
+
 $serverSAN = trim((string)($_POST['server_san'] ?? ''));
 $sanArray = [];
 if ($serverSAN !== '') {
-    foreach (array_map('trim', explode(',', $serverSAN)) as $p) {
-        if ($p !== '') { $sanArray[] = $p; }
+    $parts = preg_split('/[,\s]+/', $serverSAN);
+    foreach ($parts as $p) {
+        $p = trim($p);
+        if ($p === '') continue;
+        // Already typed (DNS:, IP:, URI:, email: ...)? keep as-is
+        if (strpos($p, ':') !== false) { $sanArray[] = $p; continue; }
+        // Auto-detect IP vs DNS and prefix accordingly
+        if (filter_var($p, FILTER_VALIDATE_IP)) { $sanArray[] = 'IP:' . $p; continue; }
+        $sanArray[] = 'DNS:' . $p;
     }
+    // Deduplicate while preserving order
+    $sanArray = array_values(array_unique($sanArray));
 }
 
 $includeP12Srv = isset($_POST['include_p12_server']) && $_POST['include_p12_server'] === '1';
