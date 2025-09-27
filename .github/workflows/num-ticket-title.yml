@@ -5,56 +5,53 @@ on:
     types: [opened, edited]
 
 permissions:
-    pull-requests: write
+  pull-requests: write
 
 jobs:
-    update-title:
-        runs-on: ubuntu-latest
-        steps:
-        - name: Update PR Title
-          uses: actions/github-script@v4
-          with:
-            github-token: ${{ secrets.REPO_ACCESS_TOCKEN }}
-            script: |
-              const prTitle = '${{ github.event.pull_request.title }}';
-              const prNumber = ${{ github.event.pull_request.number }};
-              console.log(`Current PR Title: ${prTitle}`);
-              console.log(`PR Number: ${prNumber}`);
+  update-title:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update PR Title
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const pr = github.context.payload.pull_request;
+            if (!pr) return;
+            const prTitle = pr.title || '';
+            const prNumber = pr.number;
 
-              // Étape 1 : Vérifier si le titre contient déjà un tag [Ticket_X] ou [PR_X]
-              if (/\[(Ticket|PR)_\d+\]/.test(prTitle)) {
-                console.log('PR title already contains a Ticket or PR tag. No update needed.');
-                return;
-              }
+            console.log(`Current PR Title: ${prTitle}`);
+            console.log(`PR Number: ${prNumber}`);
 
-              // Étape 2 : Supprimer le préfixe "Eric CORBISIER//" s'il existe
-              let cleanedTitle = prTitle.replace(/Eric CORBISIER\/\/\s*/i, '').trim();
-              console.log(`Cleaned PR Title: ${cleanedTitle}`);
+            if (/\[(Ticket|PR)_\d+\]/.test(prTitle)) {
+              console.log('PR title already contains a Ticket or PR tag. No update needed.');
+              return;
+            }
 
-              // Étape 3 : Supprimer tout ce qui est avant '//' ou '/'
-              cleanedTitle =  cleanedTitle.replace(/.*\/\/\s*|.*\/\s*/g, '').trim();
-              console.log(`Cleaned PR Title: ${cleanedTitle}`);
+            let cleanedTitle = prTitle.replace(/Eric CORBISIER\/\/\s*/i, '').trim();
 
-              // Étape 4 : Extraire un numéro de ticket au début du titre
-              let ticketMatch = cleanedTitle.match(/^(\d+)\s+/);
-              let ticketNumber = ticketMatch ? `Ticket_${ticketMatch[1]}` : `PR_${prNumber}`;
-              console.log(`Extracted Ticket Number: ${ticketNumber}`);
+            // enlever préfixe jusqu'à '//' ou '/' (optional selon ta convention)
+            cleanedTitle = cleanedTitle.replace(/.*\/\/\s*|.*\/\s*/g, '').trim();
 
-              // Étape 5 : Retirer le numéro de ticket du début s'il existe
-              if (ticketMatch) {
-                cleanedTitle = cleanedTitle.replace(ticketMatch[0], '').trim();
-              }
+            let ticketMatch = cleanedTitle.match(/^(\d+)\s+/);
+            let ticketNumber = ticketMatch ? `Ticket_${ticketMatch[1]}` : `PR_${prNumber}`;
 
-              // Étape 6 : Reformater le titre
-              let newTitle = `[${ticketNumber}] ${cleanedTitle}`;
-              console.log(`Updating PR Title to: ${newTitle}`);
+            if (ticketMatch) {
+              cleanedTitle = cleanedTitle.replace(ticketMatch[0], '').trim();
+            }
 
-              // Étape 7 : Mettre à jour le titre sur GitHub
-              await github.pulls.update({
-                owner: '${{ github.repository_owner }}',
-                repo: '${{ github.event.repository.name }}',
-                pull_number: prNumber,
-                title: newTitle
-              });
+            const newTitle = `[${ticketNumber}] ${cleanedTitle}`;
+            if (newTitle === prTitle) {
+              console.log('Title unchanged.');
+              return;
+            }
 
-              console.log(`PR title successfully updated to: ${newTitle}`);
+            await github.rest.pulls.update({
+              owner: github.context.repo.owner,
+              repo: github.context.repo.repo,
+              pull_number: prNumber,
+              title: newTitle
+            });
+
+            console.log(`PR title successfully updated to: ${newTitle}`);

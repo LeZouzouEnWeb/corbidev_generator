@@ -1,0 +1,57 @@
+name: Close referenced issue on merge
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  issues: write
+  pull-requests: read
+  contents: read
+
+jobs:
+  close-issue:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Close referenced issue when PR merged
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const pr = github.context.payload.pull_request || {};
+            const title = pr.title || '';
+            const body = pr.body || '';
+            const text = `${title}\n${body}`;
+
+            const patterns = [
+              /\[Ticket_(\d+)\]/i,
+              /\[#(\d+)\]/,
+              /\[(\d+)\]/,
+              /\b(?:Closes|Fixes|Resolves)\s+#(\d+)\b/i,
+              /\b#(\d+)\b/
+            ];
+
+            let issueNumber = null;
+            for (const p of patterns) {
+              const m = text.match(p);
+              if (m) { issueNumber = parseInt(m[1], 10); break; }
+            }
+
+            if (!issueNumber) {
+              console.log('Aucun numéro d\'issue détecté dans le titre ou le corps de la PR. Rien à fermer.');
+              return;
+            }
+
+            try {
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+                state: 'closed'
+              });
+              console.log(`Issue #${issueNumber} fermée avec succès.`);
+            } catch (error) {
+              console.error(`Échec lors de la fermeture de l'issue #${issueNumber}:`, error);
+              throw error;
+            }

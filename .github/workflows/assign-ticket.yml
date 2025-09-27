@@ -1,62 +1,62 @@
-name: Assign Ticket Number
+name: Close Referenced Ticket on Merge
 
 on:
   pull_request:
-    types: [opened]
+    types: [closed]
 
 permissions:
+  issues: write
   pull-requests: read
   contents: read
 
 jobs:
-  assign-ticket:
+  close-ticket:
+    if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     steps:
-      - name: Assign Ticket Number
-        id: assign
+      - name: Close referenced ticket when PR is merged
         uses: actions/github-script@v4
         with:
-          github-token: ${{ secrets.REPO_ACCESS_TOCKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            // Extraire le numéro de pull request comme entier
-            const prNumber = parseInt('${{ github.event.pull_request.number }}', 10);
+            const pr = github.context.payload.pull_request || {};
+            const title = pr.title || '';
+            const body = pr.body || '';
+            console.log(`PR merged: ${pr.number} - ${title}`);
 
-            if (isNaN(prNumber)) {
-              throw new Error('Invalid pull request number');
+            function extractTicketNumber(text) {
+              if (!text) return null;
+              let m = text.match(/\[Ticket_(\d+)\]/i);
+              if (m) return m[1];
+              m = text.match(/Closes\s+#(\d+)/i);
+              if (m) return m[1];
+              m = text.match(/\[(?:PR)_(\d+)\]/i);
+              if (m) return m[1];
+              m = text.match(/^(\d+)\b/);
+              if (m) return m[1];
+              return null;
             }
 
-            // Requête GraphQL avec le numéro correct
-            const response = await github.graphql(`
-              query($owner: String!, $repo: String!, $number: Int!) {
-                repository(owner: $owner, name: $repo) {
-                  pullRequest(number: $number) {
-                    title
-                    body
-                  }
-                }
-              }
-            `, {
-              owner: "${{ github.repository_owner }}",
-              repo: "${{ github.event.repository.name }}",
-              number: prNumber
-            });
+            const ticketFromTitle = extractTicketNumber(title);
+            const ticketFromBody = extractTicketNumber(body);
+            const ticketNumber = ticketFromTitle || ticketFromBody;
 
-            // Extraire les informations du PR
-            const pr = response.repository.pullRequest;
-
-            // Appeler la fonction pour extraire le numéro de ticket
-            const ticketNumber = extractTicketNumber(pr.title);
-
-            if (ticketNumber) {
-              console.log(`Ticket number found: ${ticketNumber}`);
-              // Ajoutez ici le code pour associer le numéro de ticket au PR si nécessaire
-            } else {
-              console.log('No ticket number found in PR title');
+            if (!ticketNumber) {
+              console.log('No ticket number found in PR title or body. Nothing to close.');
+              return;
             }
 
-            // Fonction pour extraire le numéro de ticket du titre
-            function extractTicketNumber(title) {
-              const pattern = /\[Ticket_\d+\]/i;
-              const match = title.match(pattern);
-              return match ? match[1] : null;
+            console.log(`Attempting to close issue #${ticketNumber}`);
+
+            try {
+              await github.issues.update({
+                owner: github.context.repo.owner,
+                repo: github.context.repo.repo,
+                issue_number: parseInt(ticketNumber, 10),
+                state: 'closed'
+              });
+              console.log(`Issue #${ticketNumber} closed successfully.`);
+            } catch (error) {
+              console.error('Failed to close issue:', error);
+              throw error;
             }
