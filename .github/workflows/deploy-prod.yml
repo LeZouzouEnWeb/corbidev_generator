@@ -17,31 +17,43 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Prepare SSH
+        uses: webfactory/ssh-agent@v0.8.1
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add remote host to known_hosts
         run: |
+          set -euo pipefail
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
-          # Nettoie d'éventuels CRLF
-          tr -d '\r' < ~/.ssh/id_rsa > ~/.ssh/id_rsa.clean && mv ~/.ssh/id_rsa.clean ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H "${{ secrets.REMOTE_HOST }}" >> ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
 
       - name: Sanity check SSH
-        run: ssh -i ~/.ssh/id_rsa ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }} "echo 'SSH OK, HOME=' \$HOME"
-
-      - name: Ensure destination exists
         run: |
-          DEST="${{ secrets.REMOTE_CHEMIN }}/${{ vars.ADRESSE_GLOBAL }}/${{ vars.ADRESSE_PROD }}"
-          ssh -i ~/.ssh/id_rsa ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }} "mkdir -p \"$DEST\""
+          set -euo pipefail
+          ssh -o BatchMode=yes ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }} "echo 'SSH OK'"
+
+      - name: Ensure destination exists (remote)
+        env:
+          DEST: "${{ secrets.REMOTE_CHEMIN }}/${{ vars.ADRESSE_GLOBAL }}/${{ vars.ADRESSE_PROD }}"
+        run: |
+          set -euo pipefail
+          ssh ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }} "mkdir -p \"$DEST\""
 
       - name: Rsync to server
+        env:
+          DEST: "${{ secrets.REMOTE_CHEMIN }}/${{ vars.ADRESSE_GLOBAL }}/${{ vars.ADRESSE_PROD }}"
         run: |
-          DEST="${{ secrets.REMOTE_CHEMIN }}/${{ vars.ADRESSE_GLOBAL }}/${{ vars.ADRESSE_PROD }}"
-          rsync -avz --delete \
-            --human-readable \
+          set -euo pipefail
+          # fallback si .rsync-ignore absent
+          if [ ! -f .rsync-ignore ]; then
+            echo ".rsync-ignore not found, creating minimal ignore"
+            printf ".git\nnode_modules\nvendor\n" > .rsync-ignore
+          fi
+          rsync -avz --compress-level=9 --delete-after --human-readable \
             --exclude-from=".rsync-ignore" \
-            -e "ssh -i ~/.ssh/id_rsa" \
+            -e "ssh -o StrictHostKeyChecking=yes" \
             ./ ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }}:"$DEST"
 
       # (Optionnel) Build/Composer côté serveur
